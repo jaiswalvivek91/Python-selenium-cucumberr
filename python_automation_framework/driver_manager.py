@@ -34,9 +34,11 @@ class DriverManager:
             if headless:
                 options.add_argument("--headless=new")
             options.add_argument(f"--window-size={window_size}")
-            service = ChromeService(ChromeDriverManager().install())
+            service = Service()
+            options = webdriver.ChromeOptions()
             self.driver = webdriver.Chrome(service=service, options=options)
-
+            # service = ChromeService(ChromeDriverManager().install())
+            # self.driver = webdriver.Chrome(service=service, options=options)
         elif browser == "firefox":
             options = FirefoxOptions()
             if headless:
