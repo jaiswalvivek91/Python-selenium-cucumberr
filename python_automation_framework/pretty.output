@@ -1,0 +1,62 @@
+Feature: Get user from API # features/api_testing.feature:1
+
+  @api @rest
+  Scenario: Retrieve user by ID                                              # features/api_testing.feature:4
+    Given the API endpoint is "https://jsonplaceholder.typicode.com/users/1" # None
+    When I send a GET request                                                # None
+    Then the response status code should be 200                              # None
+    And the response should contain field "username"                         # None
+
+  @postApi
+  Scenario: Create a new post via POST request                             # features/api_testing.feature:11
+    Given the API endpoint is "https://jsonplaceholder.typicode.com/posts" # None
+    And the following JSON payload                                         # None
+      | key    | value |
+      | title  | foo   |
+      | body   | bar   |
+      | userId | 1     |
+    When I send a POST request                                             # None
+    Then the response status code should be 201                            # None
+    And the response JSON should match the schema "post_schema.json"       # None
+
+Feature: Basic database validation # features/database_testing.feature:1
+
+  @db @mysql
+  Scenario: Verify user exists in the database                                 # features/database_testing.feature:4
+    Given I connect to the database                                            # None
+    When I run the query "SELECT username FROM users WHERE username = 'admin'" # None
+    Then the result should include "admin"                                     # None
+
+  @db @mysql
+  Scenario: Count the number of users in the system   # features/database_testing.feature:10
+    Given I connect to the database                   # None
+    When I run the query "SELECT COUNT(*) FROM users" # None
+    Then the result should be greater than 0          # None
+
+Feature: Login Feature # features/ui_testing.feature:1
+
+  Scenario: User logs in successfully            # features/ui_testing.feature:4
+    Given I open the login page                  # None
+    When I enter valid credentials               # None
+    Then I should be redirected to the dashboard # None
+
+  @login @smoke
+  Scenario: Successful login                                                # features/ui_testing.feature:11
+    Given I am on the login page                                            # steps/login_steps.py:30
+    When I enter valid username "standard_user" and password "secret_sauce" # steps/login_steps.py:36
+    And I click the login button                                            # steps/login_steps.py:48
+    Then I should see the dashboard                                         # steps/login_steps.py:53
+      Traceback (most recent call last):
+        File "/Users/vivekjaiswal/Documents/Framework/final_automation_framework/.venv/lib/python3.9/site-packages/behave/model.py", line 1329, in run
+          match.run(runner.context)
+        File "/Users/vivekjaiswal/Documents/Framework/final_automation_framework/.venv/lib/python3.9/site-packages/behave/matchers.py", line 98, in run
+          self.func(context, *args, **kwargs)
+        File "steps/login_steps.py", line 57, in step_verify_redirect_to_dashboard
+          assert context.dashboard_page.is_dashboard_loaded(), "Dashboard was not loaded"
+        File "/Users/vivekjaiswal/Documents/Framework/final_automation_framework/.venv/lib/python3.9/site-packages/allure_commons/_allure.py", line 192, in impl
+          return func(*a, **kw)
+        File "/Users/vivekjaiswal/Documents/Framework/python_automation_framework/pages/dashboard_page.py", line 20, in is_dashboard_loaded
+          return self.is_element_displayed(self.PRODUCTS_CONTAINER)
+      AttributeError: 'DashboardPage' object has no attribute 'is_element_displayed'
+
+
