@@ -1,4 +1,3 @@
-
 import os
 import subprocess
 import sys
@@ -18,7 +17,13 @@ def run_behave_tests():
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_reports_dir = "reports"
-    allure_results_dir = os.path.join(base_reports_dir, f"allure-results-{timestamp}")
+
+    # 🔹 Fixed parent folder for allure results
+    allure_results_base = os.path.join(base_reports_dir, "allure-results")
+    os.makedirs(allure_results_base, exist_ok=True)
+
+    # 🔹 Timestamped subfolder with prefix
+    allure_results_dir = os.path.join(allure_results_base, f"allure_results_{timestamp}")
     os.makedirs(allure_results_dir, exist_ok=True)
 
     features_path = os.path.join(os.getcwd(), "features")
@@ -51,15 +56,21 @@ def run_behave_tests():
         print("\n✅ Behave tests executed successfully!")
     except subprocess.CalledProcessError as e:
         print("\n❌ Behave tests failed or errors occurred!")
-        # e.stdout and e.stderr can be None sometimes, guard just in case
         print("STDOUT:\n", e.stdout or "")
         print("STDERR:\n", e.stderr or "")
 
     return allure_results_dir, timestamp
 
+
 def generate_allure_report(allure_results_dir, timestamp):
     base_reports_dir = os.path.dirname(allure_results_dir)
-    allure_report_dir = os.path.join(base_reports_dir, f"allure-report-{timestamp}")
+
+    # 🔹 Fixed parent folder for allure reports
+    allure_report_base = base_reports_dir.replace("allure-results", "allure-report")
+    os.makedirs(allure_report_base, exist_ok=True)
+
+    # 🔹 Timestamped subfolder with prefix
+    allure_report_dir = os.path.join(allure_report_base, f"allure_report_{timestamp}")
     os.makedirs(allure_report_dir, exist_ok=True)
 
     print("\n📊 Generating Allure HTML report...")
