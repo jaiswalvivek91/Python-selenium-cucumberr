@@ -1,19 +1,14 @@
+image: python:3.13
+
 workflow:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_COMMIT_BRANCH == $BRANCH_NAME'
       when: always
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$BRANCH_NAME'
       when: always
-
-image: python:3.11
-
-default:
-  tags:
-    - mfs-ci
-    - eks
-    - linux
 
 variables:
+  BRANCH_NAME: "VivekTest"
   ALLURE_VERSION: "2.27.0"
   DISPLAY: ":99"
   PYTHONUNBUFFERED: "1"
@@ -21,6 +16,10 @@ variables:
   ALLURE_REPORT_DIR: "reports/allure-report"
   REPORTS_DIR: "reports"
   MAX_REPORTS: "10"
+
+default:
+  tags:
+    - shell-runner
 
 stages:
   - test
@@ -33,16 +32,19 @@ cache:
     - reports/public/
 
 .default_before_script: &allure_setup
-  - python -V
+  - python3 --version
   - apt-get update && apt-get install -y default-jre unzip wget curl xvfb chromium chromium-driver xclip
+  - python3 -m venv .venv
+  - source .venv/bin/activate
   - pip install --upgrade pip
+  - pip install -r requirements.txt
   - export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
   - java -version
   - echo "Downloading Allure CLI v$ALLURE_VERSION..."
   - curl -o allure.zip -L "https://github.com/allure-framework/allure2/releases/download/$ALLURE_VERSION/allure-$ALLURE_VERSION.zip"
   - unzip -o allure.zip -d /opt/allure
   - export PATH=/opt/allure/allure-$ALLURE_VERSION/bin:$PATH
-  - pip install -r requirements.txt
+  - export ALLURE_VERSION="$ALLURE_VERSION"
 
 before_script:
   - *allure_setup
@@ -51,25 +53,23 @@ test_execution:
   stage: test
   allow_failure: false
   rules:
-    - when: always
+    - if: '$CI_COMMIT_BRANCH == $BRANCH_NAME'
+      when: always
   script:
-    - echo "Running test suite"
+    - echo "Running test suite on branch:$BRANCH_NAME"
     - rm -rf $ALLURE_RESULTS_DIR $ALLURE_REPORT_DIR
-    - mkdir -p $ALLURE_RESULTS_DIR  # create folder before test run
-    - xvfb-run -a python3 $SCRIPT/run.py || export TEST_EXIT_CODE=$?
+    - mkdir -p $ALLURE_RESULTS_DIR
+    - source .venv/bin/activate
+    - xvfb-run -a python3 test_runner.py || export TEST_EXIT_CODE=$?
     - echo "Test execution completed"
     - echo "Contents of allure-results directory:"
     - ls -l $ALLURE_RESULTS_DIR
-    - echo "Allure result JSON content (for debug):"
-    - find $ALLURE_RESULTS_DIR -name "*.json" -exec cat {} \;
-    # Exit with actual test exit code if previously failed
     - exit ${TEST_EXIT_CODE:-0}
   artifacts:
     when: always
     paths:
-      - $ALLURE_RESULTS_DIR
-      - reports/allure-report/
-      - reports/screenshots
+      - reports/allure-results
+      - reports/allure-report
     expire_in: 2 days
 
 generate_allure_report:
@@ -83,16 +83,12 @@ generate_allure_report:
     paths:
       - reports/public
   script:
+    - latest_results_dir=$(ls -td reports/allure-results/allure_results_* | head -n 1)
+    - echo "Using latest allure results folder:$latest_results_dir"
     - rm -rf $ALLURE_REPORT_DIR
-    - echo "Generating Allure Report..."
-    - /opt/allure/allure-2.27.0/bin/allure generate $ALLURE_RESULTS_DIR -o $ALLURE_REPORT_DIR --clean
-    - echo "Allure Report Generated..."
-    - echo "Contents of JSON in allure-results:"
-    - find $ALLURE_RESULTS_DIR -name '*.json' -exec cat {} \;
-    # ADD THESE LINES:
-    # Create public dir if not exists
+    - /opt/allure/allure-$ALLURE_VERSION/bin/allure generate "$latest_results_dir" -o $ALLURE_REPORT_DIR --clean
     - mkdir -p reports/public
-    - cp "Config/categories.json" "$ALLURE_REPORT_DIR/categories.json"
+    # 🔹 Updated to use find-based counting (like Team B's approach)
     - count=$(find reports/public -maxdepth 1 -type d -name "run-*" | wc -l)
     - next=$((count+1))
     - cp -r $ALLURE_REPORT_DIR "reports/public/run-$next"
@@ -102,7 +98,7 @@ generate_allure_report:
     paths:
       - $ALLURE_REPORT_DIR
       - reports/public
-    expire_in: 1 days
+    expire_in: 10 days
     when: always
 
 pages:
