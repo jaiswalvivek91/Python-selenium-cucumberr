@@ -1,0 +1,117 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: always
+
+image: python:3.11
+
+default:
+  tags:
+    - mfs-ci
+    - eks
+    - linux
+
+variables:
+  ALLURE_VERSION: "2.27.0"
+  DISPLAY: ":99"
+  PYTHONUNBUFFERED: "1"
+  ALLURE_RESULTS_DIR: "reports/allure-results"
+  ALLURE_REPORT_DIR: "reports/allure-report"
+  REPORTS_DIR: "reports"
+  MAX_REPORTS: "10"
+
+stages:
+  - test
+  - report
+  - pages
+
+cache:
+  key: allure-report-cache
+  paths:
+    - reports/public/
+
+.default_before_script: &allure_setup
+  - python -V
+  - apt-get update && apt-get install -y default-jre unzip wget curl xvfb chromium chromium-driver xclip
+  - pip install --upgrade pip
+  - export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+  - java -version
+  - echo "Downloading Allure CLI v$ALLURE_VERSION..."
+  - curl -o allure.zip -L "https://github.com/allure-framework/allure2/releases/download/$ALLURE_VERSION/allure-$ALLURE_VERSION.zip"
+  - unzip -o allure.zip -d /opt/allure
+  - export PATH=/opt/allure/allure-$ALLURE_VERSION/bin:$PATH
+  - pip install -r requirements.txt
+
+before_script:
+  - *allure_setup
+
+test_execution:
+  stage: test
+  allow_failure: false
+  rules:
+    - when: always
+  script:
+    - echo "Running test suite"
+    - rm -rf $ALLURE_RESULTS_DIR $ALLURE_REPORT_DIR
+    - mkdir -p $ALLURE_RESULTS_DIR  # create folder before test run
+    - xvfb-run -a python3 $SCRIPT/run.py || export TEST_EXIT_CODE=$?
+    - echo "Test execution completed"
+    - echo "Contents of allure-results directory:"
+    - ls -l $ALLURE_RESULTS_DIR
+    - echo "Allure result JSON content (for debug):"
+    - find $ALLURE_RESULTS_DIR -name "*.json" -exec cat {} \;
+    # Exit with actual test exit code if previously failed
+    - exit ${TEST_EXIT_CODE:-0}
+  artifacts:
+    when: always
+    paths:
+      - $ALLURE_RESULTS_DIR
+      - reports/allure-report/
+      - reports/screenshots
+    expire_in: 2 days
+
+generate_allure_report:
+  stage: report
+  before_script:
+    - *allure_setup
+  dependencies:
+    - test_execution
+  cache:
+    key: allure-report-cache
+    paths:
+      - reports/public
+  script:
+    - rm -rf $ALLURE_REPORT_DIR
+    - echo "Generating Allure Report..."
+    - /opt/allure/allure-2.27.0/bin/allure generate $ALLURE_RESULTS_DIR -o $ALLURE_REPORT_DIR --clean
+    - echo "Allure Report Generated..."
+    - echo "Contents of JSON in allure-results:"
+    - find $ALLURE_RESULTS_DIR -name '*.json' -exec cat {} \;
+    # ADD THESE LINES:
+    # Create public dir if not exists
+    - mkdir -p reports/public
+    - cp "Config/categories.json" "$ALLURE_REPORT_DIR/categories.json"
+    - count=$(find reports/public -maxdepth 1 -type d -name "run-*" | wc -l)
+    - next=$((count+1))
+    - cp -r $ALLURE_REPORT_DIR "reports/public/run-$next"
+    - chmod +x report_index_generator.sh
+    - ./report_index_generator.sh
+  artifacts:
+    paths:
+      - $ALLURE_REPORT_DIR
+      - reports/public
+    expire_in: 1 days
+    when: always
+
+pages:
+  stage: pages
+  dependencies:
+    - generate_allure_report
+  script:
+    - mv reports/public public
+  artifacts:
+    paths:
+      - public
+    when: always
